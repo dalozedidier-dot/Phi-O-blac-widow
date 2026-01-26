@@ -34,16 +34,32 @@ jobs:
 
       - name: Test with pytest (reports)
         run: |
+          set -euo pipefail
           mkdir -p .contract/test-reports/test-results
-          PYTHONPATH=. pytest -q --tb=short             --junitxml=.contract/test-reports/test-results/pytest.xml             --html=.contract/test-reports/report.html --self-contained-html
+          PYTHONPATH=. pytest -q --tb=short \
+            --junitxml=.contract/test-reports/test-results/pytest.xml \
+            --html=.contract/test-reports/report.html \
+            --self-contained-html
+
+      - name: Debug report files
+        if: always()
+        run: |
+          echo "PWD=$(pwd)"
+          echo "LS root:"
+          ls -la
+          echo "LS .contract:"
+          ls -la .contract || true
+          echo "Find .contract files:"
+          find .contract -maxdepth 5 -type f -print || true
 
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: python-app-artifacts
-          path: .contract/
-          if-no-files-found: warn
+          path: |
+            .contract/**
+          if-no-files-found: error
 
       - name: Write summary
         if: always()
