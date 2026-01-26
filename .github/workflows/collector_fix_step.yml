@@ -1,0 +1,16 @@
+# À insérer juste avant l'étape "Run collector max tests"
+- name: Debug + fix collector executable
+  shell: bash
+  run: |
+    set -euo pipefail
+    echo "PWD=$(pwd)"
+    echo "LS scripts:"
+    ls -la scripts || true
+    echo "EXISTS?"; test -e scripts/phio_llm_collect.sh && echo YES || echo NO
+    echo "EXEC?";   test -x scripts/phio_llm_collect.sh && echo YES || echo NO
+
+    # Fix permissions (si le fichier existe)
+    if test -e scripts/phio_llm_collect.sh; then
+      chmod +x scripts/phio_llm_collect.sh
+      echo "After chmod: EXEC?"; test -x scripts/phio_llm_collect.sh && echo YES || echo NO
+    fi
