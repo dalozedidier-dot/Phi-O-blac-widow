@@ -2,9 +2,9 @@ name: PhiO Contract CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
 
 env:
   PHIO_CONTRACT_POLICY: HONEST
@@ -12,9 +12,13 @@ env:
   PHIO_ALLOW_EXEC_EXTRACTION: "false"
   PHIO_UPDATE_BASELINE: "false"
 
+permissions:
+  contents: read
+
 jobs:
   contract-validation:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,21 +48,20 @@ jobs:
         env:
           PHIO_INSTRUMENT: "phi_otimes_o_instrument_v0_1.py"
         run: |
-          chmod +x final_validation.sh validate_contract_warnings.sh
+          chmod +x final_validation.sh validate_contract_warnings.sh || true
           ./final_validation.sh
 
-      - name: Run all tests
+      - name: Run all tests (reports)
         env:
           PHIO_INSTRUMENT: "phi_otimes_o_instrument_v0_1.py"
         run: |
-          python -m pytest tests/ -q --tb=short
+          mkdir -p .contract/test-reports/test-results
+          PYTHONPATH=. pytest tests/ -q --tb=short             --junitxml=.contract/test-reports/test-results/pytest.xml             --html=.contract/test-reports/report.html --self-contained-html
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phio-contract-artifacts
-          path: |
-            .contract/
-            test-reports/
-            test-results/
+          path: .contract/
+          if-no-files-found: warn
