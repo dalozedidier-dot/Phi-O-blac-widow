@@ -1,23 +1,25 @@
-PHIO PATCH BUNDLE
-=================
+PHIO PATCH BUNDLE v2
+===================
 
-Contenu
--------
-1) .github/workflows/ci.yml
-   - CI GitHub Actions (Python 3.11)
-   - Installe requirements.txt
-   - Vérifie la présence de scripts/phi_otimes_o_instrument_v0_1.py
-   - Lance pytest avec INSTRUMENT_PATH=scripts/phi_otimes_o_instrument_v0_1.py
+Delta vs v1
+-----------
+- Adds tests/CONFTST_APPEND_SNIPPET.py : code to append to your existing tests/conftest.py.
+  This autouse fixture ensures tmp_path/'pytest_template.json' exists for every test.
 
-2) scripts/phi_otimes_o_instrument_v0_1.py
-   - Instrument stub (spec + fonctions minimales)
+Why
+---
+Your CI logs show assertions like:
+  PosixPath('.../pytest_template.json').exists == False
 
-3) tests/__init__.py
-   - Rend 'tests' importable comme package (utile si conftest/tests utilisent des imports absolus)
+This means the contract "pytest_template.json must be materialized" is currently not satisfied.
 
-Instructions d'intégration
---------------------------
-- Copier ces fichiers dans ton repo en respectant les chemins.
-- Supprimer tout workflow template non voulu dans .github/workflows (python-package.yml, etc.).
-- Si tes tests attendent encore 'pytest_template.json', l'instrument stub doit être enrichi
-  selon l'API/contrat exact (nécessite de voir tests/conftest.py + tests/config.py).
+How to apply
+------------
+1) Open tests/conftest.py in your repo.
+2) Paste the full content of tests/CONFTST_APPEND_SNIPPET.py at the END of that file.
+3) Commit & push.
+
+Notes
+-----
+- The fixture writes a minimal JSON schema built from the instrument get_spec()/SPEC.
+- If later tests validate content, you may need to enrich the schema to match their expectations.
