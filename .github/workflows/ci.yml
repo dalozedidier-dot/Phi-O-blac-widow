@@ -25,8 +25,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      - name: Sanity check instrument path
+        run: |
+          ls -la
+          ls -la scripts || true
+          test -f scripts/phi_otimes_o_instrument_v0_1.py
+
       - name: Run tests
         env:
-          INSTRUMENT_PATH: phi_otimes_o_instrument_v0_1.py
+          INSTRUMENT_PATH: scripts/phi_otimes_o_instrument_v0_1.py
         run: |
           python -m pytest -q
