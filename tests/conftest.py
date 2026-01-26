@@ -1,15 +1,46 @@
 import json
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator, Optional
 
 import pytest
 
 from .config import INSTRUMENT_PATH
 
 
-def _run(cmd, cwd=None):
+def _run(cmd, cwd=None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", cwd=cwd)
+
+
+@dataclass
+class CLIResult:
+    """Résultat CLI compatible avec deux patterns de tests.
+
+    - Pattern A: r = run_cli(...); r.returncode / r.stdout / r.stderr
+    - Pattern B: proc, outdir = run_cli(...)
+
+    On proxy les attributs sur subprocess.CompletedProcess et on rend l'objet itérable.
+    """
+    proc: subprocess.CompletedProcess
+    outdir: Path
+
+    @property
+    def returncode(self) -> int:
+        return int(self.proc.returncode)
+
+    @property
+    def stdout(self) -> str:
+        return self.proc.stdout or ""
+
+    @property
+    def stderr(self) -> str:
+        return self.proc.stderr or ""
+
+    def __iter__(self) -> Iterator:
+        yield self.proc
+        yield self.outdir
 
 
 @pytest.fixture(scope="session")
@@ -25,14 +56,16 @@ def run_cli(tmp_path, instrument_path):
     - Si input_json est fourni, on injecte automatiquement --input <tmpfile>
       (ou on remplace l'argument existant de --input).
     - Pour la commande score, on force --outdir si absent.
+    - Retour: CLIResult (proxy CompletedProcess + outdir, itérable).
     """
-    def _runner(args, input_json=None, outdir=None):
-        outdir = Path(outdir) if outdir else (tmp_path / "out")
-        outdir.mkdir(parents=True, exist_ok=True)
+
+    def _runner(args, input_json=None, outdir=None) -> CLIResult:
+        outdir_p = Path(outdir) if outdir else (tmp_path / "out")
+        outdir_p.mkdir(parents=True, exist_ok=True)
 
         cmd = ["python3", instrument_path] + list(args)
 
-        tmp_input = None
+        tmp_input: Optional[Path] = None
         if input_json is not None:
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".json", delete=False, encoding="utf-8"
@@ -60,14 +93,14 @@ def run_cli(tmp_path, instrument_path):
 
         # ensure outdir for score
         if "score" in cmd and ("--outdir" not in cmd):
-            cmd += ["--outdir", str(outdir)]
+            cmd += ["--outdir", str(outdir_p)]
 
-        res = _run(cmd)
+        proc = _run(cmd)
 
         if tmp_input and tmp_input.exists():
             tmp_input.unlink(missing_ok=True)
 
-        return res, outdir
+        return CLIResult(proc=proc, outdir=outdir_p)
 
     return _runner
 
@@ -75,9 +108,8 @@ def run_cli(tmp_path, instrument_path):
 @pytest.fixture
 def template_json(run_cli, tmp_path):
     """Template généré via CLI: source de vérité pour le schéma + labels."""
-    # écrire le template dans le tmp_path pour éviter contamination du cwd
     out = tmp_path / "pytest_template.json"
-    res, _ = run_cli(["new-template", "--name", "PyTestTemplate", "--out", str(out)])
+    res = run_cli(["new-template", "--name", "PyTestTemplate", "--out", str(out)])
     assert res.returncode == 0, res.stderr or res.stdout
     assert out.exists()
     return json.loads(out.read_text(encoding="utf-8"))

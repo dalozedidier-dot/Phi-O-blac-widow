@@ -45,7 +45,7 @@ def test_cli_bottleneck_documented_if_supported():
 def test_tau_aliases(run_cli, help_text=None):
     """Test des alias tau - politique configurable."""
     if help_text is None:
-        proc, _ = run_cli(["--help"])
+        proc = run_cli(["--help"])
         assert proc.returncode == 0, f"--help failed: {proc.stderr}"
         help_text = proc.stdout or ""
     policy = os.environ.get("PHIO_TAU_POLICY", "AT_LEAST_ONE").upper()
@@ -82,7 +82,7 @@ def test_cli_accepts_arguments(run_cli):
         tmp_path = tmp.name
 
     try:
-        proc, _ = run_cli(["score", "--input", tmp_path])
+        proc = run_cli(["score", "--input", tmp_path])
         err = (proc.stderr or "").lower()
 
         # argparse renvoie typiquement code 2 sur erreur de parsing
@@ -105,7 +105,7 @@ def test_cli_required_flags_behavior(run_cli):
         (["new-template", "--help"], "new-template --help must work"),
     ]
     for args, desc in cases:
-        proc, _ = run_cli(args)
+        proc = run_cli(args)
         assert proc.returncode == 0, f"{desc} failed: {proc.stderr}"
         out = (proc.stdout or "").lower()
         if "usage:" not in out and "help" not in out:
@@ -119,7 +119,7 @@ def test_cli_required_flags_behavior(run_cli):
 @pytest.mark.contract
 def test_cli_basic_contract_required_flags(run_cli):
     """Contrat minimal: sous-commandes + flags requis visibles dans --help."""
-    proc, _ = run_cli(["--help"])
+    proc = run_cli(["--help"])
     assert proc.returncode == 0, f"--help failed: {proc.stderr}"
     help_text = proc.stdout or ""
 
