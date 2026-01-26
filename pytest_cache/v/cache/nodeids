@@ -1,0 +1,23 @@
+[
+  "tests/test_00_contract_cli.py::test_cli_accepts_arguments",
+  "tests/test_00_contract_cli.py::test_cli_basic_contract_required_flags",
+  "tests/test_00_contract_cli.py::test_cli_bottleneck_documented_if_supported",
+  "tests/test_00_contract_cli.py::test_cli_help_has_core_contract",
+  "tests/test_00_contract_cli.py::test_cli_required_flags_behavior",
+  "tests/test_00_contract_cli.py::test_cli_tau_flag_contract_is_non_ambiguous",
+  "tests/test_00_contract_cli.py::test_tau_aliases",
+  "tests/test_01_sanity.py::test_help",
+  "tests/test_01_sanity.py::test_new_template_and_score_ok",
+  "tests/test_01_sanity.py::test_reject_float_score",
+  "tests/test_01_sanity.py::test_reject_missing_dimension_key",
+  "tests/test_01_sanity.py::test_reject_score_out_of_range[-1]",
+  "tests/test_01_sanity.py::test_reject_score_out_of_range[4]",
+  "tests/test_01_sanity.py::test_reject_score_out_of_range[999]",
+  "tests/test_02_properties.py::test_monotonicity_local",
+  "tests/test_03_robustness.py::test_zone_robustness",
+  "tests/test_04_aggregation.py::test_bottleneck_dominance_if_supported",
+  "tests/test_05_traceability.py::test_traceability_cases_optional",
+  "tests/test_06_golden_formula.py::test_golden_formula_if_singletons",
+  "tests/test_07_consistency.py::test_dimension_scores_consistency_singletons",
+  "tests/test_08_zone_thresholds.py::test_zone_thresholds_extractable_or_explicitly_absent"
+]
