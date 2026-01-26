@@ -1,48 +1,19 @@
-```yaml
-name: phio-ci
+# tests/config.py
+from __future__ import annotations
 
-on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+import os
+from pathlib import Path
 
-permissions:
-  contents: read
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
+# Convention repo: instrument sous scripts/
+DEFAULT_INSTRUMENT = REPO_ROOT / "scripts" / "phi_otimes_o_instrument_v0_1.py"
 
-    steps:
-      - uses: actions/checkout@v4
+# Permet override via env (CI ou local)
+_env = os.environ.get("INSTRUMENT_PATH", "").strip()
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-
-      - name: Sanity check instrument path
-        run: |
-          ls -la
-          ls -la scripts || true
-          test -f scripts/phi_otimes_o_instrument_v0_1.py
-
-      - name: Run tests (debug)
-        env:
-          INSTRUMENT_PATH: scripts/phi_otimes_o_instrument_v0_1.py
-        run: |
-          python -m pytest -vv -s --maxfail=1
-
-      - name: Debug artifacts
-        if: always()
-        run: |
-          echo "=== pytest_template.json occurrences ==="
-          find /tmp/pytest-of-runner -type f -name "pytest_template.json" -print || true
-          echo "=== sample files (first 200) ==="
-          find /tmp/pytest-of-runner -maxdepth 3 -type f | head -n 200 || true
-```
+if _env:
+    p = Path(_env)
+    INSTRUMENT_PATH = p if p.is_absolute() else (REPO_ROOT / p).resolve()
+else:
+    INSTRUMENT_PATH = DEFAULT_INSTRUMENT.resolve()
