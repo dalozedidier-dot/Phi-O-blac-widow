@@ -1,9 +1,12 @@
-# Traceability (cases)
+# Traceability (PRE → POST)
 
-- `traceability_cases.json` holds PRE → POST bookkeeping at case granularity.
-- Run validation:
-  - `python3 scripts/validate_traceability.py traceability_cases.json`
-  - or `bash tests/test_traceability.sh`
+Files:
+- traceability_cases.json: list of cases (machine-checkable)
+- templates_post/: fill POST templates, then copy A/B into traceability_cases.json
+- scripts/validate_traceability.py: validator (no external deps)
+- tests/test_traceability.sh: convenience wrapper
 
-Templates:
-- `templates_post/*.md` are empty POST templates to fill for each PRE.
+Validate:
+```bash
+bash tests/test_traceability.sh
+```

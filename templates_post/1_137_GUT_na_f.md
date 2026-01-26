@@ -1,25 +1,40 @@
-# α (≈1/137) — GUT naïf — POST Template (à remplir)
+# α (≈1/137) — GUT naïf (POST)
 
-## Machine-checkable (ne pas modifier la structure)
+## Machine-checkable block (do not edit keys)
 ```json
 {
   "case_id": "0002",
   "pre_source": "TEST_MATRIX_PRE_GUT_NAIF.md",
   "post": {
-    "A": [0,0,0,0,0],
-    "B": [0,0,0]
+    "A": [0, 0, 0, 0, 0],
+    "B": [0, 0, 0]
   }
 }
 ```
 
-## Règle de verdict E (déterministe)
-- Si min(post.A) == 0 → verdict_E = "INCOMPATIBLE"
-- Sinon si min(post.A) == 1 → verdict_E = "INCONCLUSIF"
-- Sinon (post.A tous à 2) :
-  - Si min(post.B) < 2 → verdict_E = "COMPATIBLE_PARTIELLE"
-  - Sinon → verdict_E = "COMPATIBLE"
+## Scoring (0–2)
 
-## Champs à remplir (descriptif uniquement)
-- A1..A5: score 0–2 + justification (1–3 lignes chacune)
-- B1..B3: score 0–2 + justification (1–3 lignes chacune)
-- Log d’audit: 5 lignes typiques (tags H/S/NC si utilisés)
+### A — Verrous E (A1..A5)
+- A1 / E1 — Échelle Q explicite: score __ /2 — justification:
+- A2 / E2 — Schéma explicite: score __ /2 — justification:
+- A3 / E3 — Domaine explicite: score __ /2 — justification:
+- A4 / E4 — Ordre explicite: score __ /2 — justification:
+- A5 / E5 — Séparation structure vs contingence: score __ /2 — justification:
+
+### B — Métrologie (B1..B3)
+- B1 — α(0) IR on-shell / Thomson: score __ /2 — justification:
+- B2 — “1/137” comme arrondi + valeur recommandée: score __ /2 — justification:
+- B3 — Running illustré via α(MZ) ou α(Q): score __ /2 — justification:
+
+## Audit log (5 lignes)
+- L1: … tags: [H/S/NC]
+- L2: … tags: [H/S/NC]
+- L3: … tags: [H/S/NC]
+- L4: … tags: [H/S/NC]
+- L5: … tags: [H/S/NC]
+
+## Verdict rule (deterministic)
+- min(post.A) == 0 → INCOMPATIBLE
+- min(post.A) == 1 → INCONCLUSIF
+- all(post.A) == 2 and min(post.B) < 2 → COMPATIBLE_PARTIELLE
+- all(post.A) == 2 and min(post.B) >= 2 → COMPATIBLE

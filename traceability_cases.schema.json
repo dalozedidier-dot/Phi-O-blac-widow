@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PHIO Traceability Cases",
   "type": "array",
   "items": {
     "type": "object",
@@ -10,7 +9,8 @@
       "pre_source",
       "pre",
       "post",
-      "verdict_E"
+      "verdict_E",
+      "notes"
     ],
     "properties": {
       "case_id": {
@@ -103,6 +103,9 @@
           "COMPATIBLE_PARTIELLE",
           "COMPATIBLE"
         ]
+      },
+      "notes": {
+        "type": "string"
       }
     }
   }
