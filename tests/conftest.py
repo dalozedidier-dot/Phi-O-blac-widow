@@ -22,13 +22,30 @@ def instrument_path():
 def run_cli(tmp_path, instrument_path):
     """Exécute le CLI comme une boîte noire.
 
-    - Si input_json est fourni, on injecte automatiquement --input <tmpfile>
-      (ou on remplace l'argument existant de --input).
-    - Pour la commande score, on force --outdir si absent.
+    Compatibilité: certains tests attendent `proc = run_cli([...])`, d'autres
+    attendent `proc, outdir = run_cli([...])`. On retourne un wrapper
+    itérable qui supporte les deux.
     """
+
+    class CliResult:
+        def __init__(self, proc, outdir):
+            self._proc = proc
+            self.outdir = outdir
+
+        def __iter__(self):
+            yield self._proc
+            yield self.outdir
+
+        def __getattr__(self, name):
+            return getattr(self._proc, name)
+
+        @property
+        def proc(self):
+            return self._proc
+
     def _runner(args, input_json=None, outdir=None):
-        outdir = Path(outdir) if outdir else (tmp_path / "out")
-        outdir.mkdir(parents=True, exist_ok=True)
+        outdir_p = Path(outdir) if outdir else (tmp_path / "out")
+        outdir_p.mkdir(parents=True, exist_ok=True)
 
         cmd = ["python3", instrument_path] + list(args)
 
@@ -58,16 +75,16 @@ def run_cli(tmp_path, instrument_path):
                 if not replaced:
                     cmd += ["--input", str(tmp_input)]
 
-        # ensure outdir for score
-        if "score" in cmd and ("--outdir" not in cmd):
-            cmd += ["--outdir", str(outdir)]
+        # ensure outdir for score (mais pas pour score --help)
+        if "score" in cmd and "--help" not in cmd and ("--outdir" not in cmd):
+            cmd += ["--outdir", str(outdir_p)]
 
         res = _run(cmd)
 
         if tmp_input and tmp_input.exists():
             tmp_input.unlink(missing_ok=True)
 
-        return res, outdir
+        return CliResult(res, outdir_p)
 
     return _runner
 

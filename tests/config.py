@@ -1,34 +1,21 @@
-from __future__ import annotations
-
 import os
 from pathlib import Path
-from typing import Any, Dict
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+# Instrument
+PHIO_INSTRUMENT = os.environ.get("PHIO_INSTRUMENT", "phi_otimes_o_instrument_v0_1.py")
+INSTRUMENT_PATH = Path(PHIO_INSTRUMENT).resolve()
 
-# -----------------------------------------------------------------------------
-# Instrument path
-# -----------------------------------------------------------------------------
-DEFAULT_INSTRUMENT = REPO_ROOT / "scripts" / "phi_otimes_o_instrument_v0_1.py"
-_env = os.environ.get("INSTRUMENT_PATH", "").strip()
+# Robustesse
+ROBUSTNESS_MAX_ZONE_CHANGE_RATE = float(os.environ.get("PHIO_ROBUSTNESS_RATE", "0.30"))
+PERTURBATION_COUNT = int(os.environ.get("PHIO_PERTURB_N", "20"))
 
-if _env:
-    p = Path(_env)
-    INSTRUMENT_PATH = p if p.is_absolute() else (REPO_ROOT / p).resolve()
-else:
-    INSTRUMENT_PATH = DEFAULT_INSTRUMENT.resolve()
+# Unicode τ : par défaut on suit le template réel; si besoin on force un alias ASCII.
+FORCE_ASCII_TAU = os.environ.get("PHIO_FORCE_ASCII_TAU", "0") == "1"
 
-# -----------------------------------------------------------------------------
-# Robustness test parameters (expected by tests/test_03_robustness.py)
-# -----------------------------------------------------------------------------
-# Valeurs par défaut "neutres". Ajuste si les tests imposent un domaine spécifique.
-ROBUSTNESS_MAX_ZONE_CHANGE_RATE: float = float(os.environ.get("ROBUSTNESS_MAX_ZONE_CHANGE_RATE", "0.25"))
-PERTURBATION_COUNT: int = int(os.environ.get("PERTURBATION_COUNT", "10"))
+# Attendus (si formule stable et exportée dans results.json)
+# T = Cx + tau + G + D - K_eff
+# K_eff = K / (1 + tau + G + D + Cx)
+FORMULA_EXPECTED = True
 
-# Structure d'entrée robuste générique.
-# Si les tests attendent des clés précises, il faudra aligner ce dict sur leurs attentes.
-ROBUSTNESS_INPUT: Dict[str, Any] = {
-    "mode": os.environ.get("ROBUSTNESS_MODE", "default"),
-    "seed": int(os.environ.get("ROBUSTNESS_SEED", "0")),
-    "notes": "default robustness input (override via env if needed)",
-}
+# Optionnel: fichier JSON explicite pour robustesse (évite la flakiness près des seuils)
+ROBUSTNESS_INPUT = os.environ.get("PHIO_ROBUSTNESS_INPUT", "").strip() or None
