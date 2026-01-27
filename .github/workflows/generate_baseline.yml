@@ -30,36 +30,46 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Debug: which extractor is imported + direct extraction result
+      - name: Debug: confirm instrument + confirm extractor import + direct extraction
         shell: bash
         run: |
           set -Eeuo pipefail
           python - <<'PY'
+          import os
           import inspect
           from pathlib import Path
+
           from tests.contracts import extract_zone_thresholds_ast
 
+          print("=== EXTRACTOR IMPORT PROOF ===")
           print("extract_zone_thresholds_ast sourcefile:", inspect.getsourcefile(extract_zone_thresholds_ast))
+          print("extract_zone_thresholds_ast firstline:", extract_zone_thresholds_ast.__code__.co_firstlineno)
 
           instr = Path("./phi_otimes_o_instrument_v0_1.py")
+          print("\n=== INSTRUMENT PROOF ===")
           print("instrument exists:", instr.exists())
           print("instrument abs:", instr.resolve())
 
-          if instr.exists():
-              head = instr.read_text(encoding="utf-8", errors="ignore").splitlines()[:80]
-              print("---- instrument HEAD (80) ----")
-              print("\n".join(head))
-              print("---- grep ZONE_THRESHOLDS ----")
-              for i, line in enumerate(instr.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-                  if "ZONE_THRESHOLDS" in line:
-                      print(f"{i}: {line}")
-                      break
+          if not instr.exists():
+              raise SystemExit("❌ instrument missing at ./phi_otimes_o_instrument_v0_1.py")
 
-              # Run extractor directly (this must NOT be None if thresholds are visible)
-              os_env = __import__("os").environ
-              os_env["PHIO_DEBUG_AST"] = "1"
-              out = extract_zone_thresholds_ast(str(instr))
-              print("direct_extract_zone_thresholds_ast:", out)
+          lines = instr.read_text(encoding="utf-8", errors="ignore").splitlines()
+          print("---- instrument HEAD (80) ----")
+          print("\n".join(lines[:80]))
+
+          print("---- first line containing ZONE_THRESHOLDS ----")
+          found = False
+          for i, line in enumerate(lines, 1):
+              if "ZONE_THRESHOLDS" in line:
+                  print(f"{i}: {line}")
+                  found = True
+                  break
+          print("ZONE_THRESHOLDS found:", found)
+
+          print("\n=== DIRECT EXTRACTION (PHIO_DEBUG_AST=1) ===")
+          os.environ["PHIO_DEBUG_AST"] = "1"
+          out = extract_zone_thresholds_ast(str(instr))
+          print("direct_extract_zone_thresholds_ast:", out)
           PY
 
       - name: Generate baseline (PHIO_DEBUG_AST=1)
