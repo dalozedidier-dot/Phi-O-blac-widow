@@ -1,4 +1,4 @@
-{}name: Generate contract baseline (artifact only)
+name: Generate contract baseline (artifact only)
 
 on:
   workflow_dispatch:
