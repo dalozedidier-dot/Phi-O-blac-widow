@@ -36,12 +36,13 @@ def _extract_long_flags(help_text: str) -> List[str]:
 
 def parse_help_flags(help_text: str) -> Dict[str, Any]:
     """
-    Tests expect a dict with keys:
+    Tests expect a dict with boolean keys like:
       - has_new_template
+      - mentions_input
+      - mentions_outdir
       - mentions_agg
       - mentions_bottleneck
-
-    Also exposes raw long flags list under key "flags".
+    Plus la liste brute sous "flags".
     """
     flags_list = _extract_long_flags(help_text)
     txt = help_text.lower()
@@ -49,46 +50,57 @@ def parse_help_flags(help_text: str) -> Dict[str, Any]:
     has_new_template = ("new-template" in txt)
     has_score = (re.search(r"\bscore\b", txt) is not None)
 
+    mentions_input = ("--input" in flags_list) or ("--input" in txt)
+    mentions_outdir = ("--outdir" in flags_list) or ("--outdir" in txt)
+
+    # Agrégation tau : on détecte la présence des options attendues
     mentions_agg = (
         "--agg_tau" in flags_list
         or "--agg_τ" in flags_list
-        or "agg_" in txt
-        or "--agg" in txt
+        or ("agg_" in txt)
+        or ("--agg" in txt)
     )
 
+    # Bottleneck : mention textuelle suffisante (contract test)
     mentions_bottleneck = ("bottleneck" in txt)
-
-    has_tau_ascii = ("--agg_tau" in flags_list)
-    has_tau_unicode = ("--agg_τ" in flags_list)
 
     return {
         "flags": flags_list,
         "has_new_template": has_new_template,
         "has_score": has_score,
+        "mentions_input": mentions_input,
+        "mentions_outdir": mentions_outdir,
         "mentions_agg": mentions_agg,
         "mentions_bottleneck": mentions_bottleneck,
-        "has_tau_ascii": has_tau_ascii,
-        "has_tau_unicode": has_tau_unicode,
     }
 
 
-def detect_tau_agg_flag(help_or_flags: Any) -> Dict[str, bool]:
+def detect_tau_agg_flag(help_text: str) -> Optional[str]:
     """
-    Detect presence of tau aggregation flags.
+    Return the actual tau aggregation flag string if present in help:
+      - prefer unicode: "--agg_τ"
+      - else ascii: "--agg_tau"
+    Return None if neither is present.
 
-    Accepts:
-      - help text (str)
-      - list/tuple/set of flags
-      - dict returned by parse_help_flags (contains key "flags")
+    This matches tests that do:
+      tau_flag = detect_tau_agg_flag(help_text)
+      assert tau_flag in ("--agg_τ", "--agg_tau")
     """
-    if isinstance(help_or_flags, str):
-        flags = parse_help_flags(help_or_flags)["flags"]
-    elif isinstance(help_or_flags, dict):
-        flags = list(help_or_flags.get("flags", []))
-    else:
-        flags = list(help_or_flags)
+    flags_list = _extract_long_flags(help_text)
 
-    s = set(flags)
+    if "--agg_τ" in flags_list:
+        return "--agg_τ"
+    if "--agg_tau" in flags_list:
+        return "--agg_tau"
+    return None
+
+
+def _tau_aliases_from_help(help_text: str) -> Dict[str, bool]:
+    """
+    For contract_probe baseline: return booleans indicating whether both aliases exist.
+    """
+    flags_list = _extract_long_flags(help_text)
+    s = set(flags_list)
     return {
         "has_tau_ascii": "--agg_tau" in s,
         "has_tau_unicode": "--agg_τ" in s,
@@ -100,17 +112,16 @@ def extract_cli_contract(help_text: str) -> Dict[str, Any]:
     Minimal contract summary used by contract_probe.
     Keeps:
       - flags as list
-      - tau_aliases dict
+      - tau_aliases as dict[bool]
     """
-    parsed = parse_help_flags(help_text)
-    flags_list = parsed["flags"]
+    flags_list = _extract_long_flags(help_text)
 
     subcommands: List[str] = []
     for cmd in ["new-template", "score"]:
         if re.search(rf"\b{re.escape(cmd)}\b", help_text):
             subcommands.append(cmd)
 
-    tau_aliases = detect_tau_agg_flag(flags_list)
+    tau_aliases = _tau_aliases_from_help(help_text)
 
     return {
         "help_valid": len(help_text.strip()) > 0,
@@ -139,7 +150,6 @@ def _is_number(x: Any) -> bool:
 
 
 def _collect_if_chain(node: ast.If) -> Optional[List[ast.If]]:
-    # Collect a linear if/elif chain: if -> elif -> elif ...
     chain: List[ast.If] = []
     cur: Optional[ast.If] = node
     while isinstance(cur, ast.If):
@@ -152,7 +162,6 @@ def _collect_if_chain(node: ast.If) -> Optional[List[ast.If]]:
 
 
 def _extract_threshold_from_test(test: ast.AST) -> Optional[float]:
-    # Accept simple Compare: T <= 0.5, T < 1.0, etc.
     if not isinstance(test, ast.Compare):
         return None
     if len(test.ops) != 1 or len(test.comparators) != 1:
@@ -160,6 +169,7 @@ def _extract_threshold_from_test(test: ast.AST) -> Optional[float]:
 
     left = test.left
     right = test.comparators[0]
+
     if not isinstance(left, ast.Name):
         return None
     if left.id not in {"T", "t"}:
@@ -172,7 +182,6 @@ def _extract_threshold_from_test(test: ast.AST) -> Optional[float]:
 
 
 def _extract_zone_from_body(body: List[ast.stmt]) -> Optional[str]:
-    # Accept assignment: zone = "Z0"
     for st in body:
         if isinstance(st, ast.Assign) and len(st.targets) == 1 and isinstance(st.targets[0], ast.Name):
             if st.targets[0].id in {"zone", "Z", "label"}:
@@ -185,7 +194,6 @@ def _extract_zone_from_body(body: List[ast.stmt]) -> Optional[str]:
 def _parse_if_chain_for_T(chain: List[ast.If]) -> Tuple[List[float], List[str]]:
     thresholds: List[float] = []
     zones: List[str] = []
-
     for n in chain:
         th = _extract_threshold_from_test(n.test)
         z = _extract_zone_from_body(n.body)
@@ -198,13 +206,15 @@ def _parse_if_chain_for_T(chain: List[ast.If]) -> Tuple[List[float], List[str]]:
 
 def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]]:
     """
-    Heuristic AST extraction of zone logic. Returns a dict with either:
-      - {"thresholds": [...], "pattern": "assign"} for numeric cutpoints
-      - {"mapping": {...}, "pattern": "assign"} for dict-based zones
-      - {"thresholds": [...], "zones": [...], "pattern": "if_chain"} for if/elif chain
-    or None if not detected (conservative).
+    Heuristic AST extraction of zone logic (conservative).
 
-    Debug: set env PHIO_DEBUG_AST=1.
+    Returns:
+      - {"thresholds": [...], "pattern": "assign", "name": "..."} for literal cutpoints
+      - {"mapping": {...}, "pattern": "assign", "name": "..."} for dict-based zones
+      - {"thresholds": [...], "zones": [...], "pattern": "if_chain"} for if/elif chain
+    or None if not detected.
+
+    Debug: PHIO_DEBUG_AST=1 prints what it sees.
     """
     debug = os.environ.get("PHIO_DEBUG_AST", "0") == "1"
 
@@ -222,7 +232,6 @@ def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]
             print(f"[PHIO_DEBUG_AST] ast.parse SyntaxError: {e}")
         return None
 
-    # 1) Look for assignments to obvious names
     candidate_names = {"ZONE_THRESHOLDS", "ZONES", "ZONE_BOUNDS", "ZONE_LIMITS", "ZONE_CUTS", "THRESHOLDS"}
 
     def _handle_assign(name: str, value_node: ast.AST) -> Optional[Dict[str, Any]]:
@@ -238,6 +247,7 @@ def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]
 
         return None
 
+    # 1) Assign / AnnAssign
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for t in node.targets:
@@ -253,7 +263,7 @@ def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]
                 if out:
                     return out
 
-    # 2) Look for if/elif chain setting zone based on T comparisons
+    # 2) if/elif chain
     for node in ast.walk(tree):
         if isinstance(node, ast.If):
             chain = _collect_if_chain(node)
