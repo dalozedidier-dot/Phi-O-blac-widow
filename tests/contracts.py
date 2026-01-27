@@ -1,53 +1,21 @@
 from __future__ import annotations
 
-import argparse
-import hashlib
-import importlib.util
-import json
-import os
+import ast
 import re
 import subprocess
-import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+# =========================================================
+# CLI helpers (importés par tests/test_00_contract_cli.py)
+# =========================================================
 
-
-def _debug(msg: str) -> None:
-    if os.environ.get("PHIO_DEBUG_PROBE", "0") == "1":
-        print(f"[PHIO_DEBUG_PROBE] {msg}")
-
-
-def _load_local_contracts_module(repo_root: Path):
+def run_help(instrument_path: str) -> str:
     """
-    Charge ./tests/contracts.py de manière déterministe.
-    Évite la dérive d'import où 'tests' peut pointer ailleurs.
+    Exécute: python3 <instrument> --help
+    Retourne stdout+stderr (ne raise pas).
     """
-    contracts_path = repo_root / "tests" / "contracts.py"
-    if not contracts_path.exists():
-        _debug(f"no tests/contracts.py at {contracts_path}")
-        return None
-
-    spec = importlib.util.spec_from_file_location("phio_repo_tests_contracts", str(contracts_path))
-    if spec is None or spec.loader is None:
-        _debug("spec_from_file_location failed")
-        return None
-
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[attr-defined]
-    _debug(f"loaded contracts module from {contracts_path}")
-    return mod
-
-
-def _run_help_fallback(instrument_path: str) -> str:
     res = subprocess.run(
         ["python3", instrument_path, "--help"],
         capture_output=True,
@@ -57,208 +25,137 @@ def _run_help_fallback(instrument_path: str) -> str:
     return (res.stdout or "") + (res.stderr or "")
 
 
-def _fallback_regex_thresholds_from_file(instrument_path: Path) -> Optional[Dict[str, Any]]:
+def _extract_long_flags(help_text: str) -> List[str]:
     """
-    Fallback strict (sans eval) : extrait ZONE_THRESHOLDS = [0.5, 1.5, 2.5]
-    ou tuple.
+    Extrait les flags longs depuis un help argparse.
+    Supporte unicode τ.
     """
-    src = instrument_path.read_text(encoding="utf-8", errors="ignore")
-    m = re.search(r"(?m)^\s*ZONE_THRESHOLDS\s*=\s*\[([^\]]+)\]\s*$", src)
-    if not m:
-        m = re.search(r"(?m)^\s*ZONE_THRESHOLDS\s*=\s*\(([^\)]+)\)\s*$", src)
-    if not m:
-        return None
-
-    inside = m.group(1)
-    nums = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)", inside)
-    if not nums:
-        return None
-
-    thresholds = [float(x) for x in nums]
-    return {"thresholds": thresholds, "pattern": "fallback_regex", "name": "ZONE_THRESHOLDS"}
+    flags = re.findall(r"(?<!\w)(--[0-9A-Za-z_\-τ]+)", help_text or "")
+    return sorted(set(f.strip() for f in flags if f.strip()))
 
 
-def extract_cli_contract(instrument_path: Path, run_help_fn) -> Dict[str, Any]:
-    cli: Dict[str, Any] = {
-        "help_valid": False,
-        "help_len": 0,
-        "subcommands": [],
-        "flags": [],
-        "required_subcommands": ["new-template", "score"],
-        "required_flags": ["--input", "--outdir"],
-    }
-    try:
-        help_text = run_help_fn(str(instrument_path))
-        cli["help_valid"] = True
-        cli["help_len"] = len(help_text or "")
-    except Exception as e:
-        cli["error"] = str(e)
-        return cli
-
-    help_text = help_text or ""
-    cli["subcommands"] = [s for s in cli["required_subcommands"] if s in help_text]
-
-    flags = []
-    for f in ["--input", "--outdir", "--help", "--agg_tau", "--agg_τ"]:
-        if f in help_text:
-            flags.append(f)
-    cli["flags"] = sorted(set(flags))
-
-    cli["tau_aliases"] = {
-        "has_tau_ascii": "--agg_tau" in help_text,
-        "has_tau_unicode": "--agg_τ" in help_text,
-    }
-    return cli
-
-
-def extract_zones(instrument_path: Path, extractor_fn) -> Dict[str, Any]:
+def parse_help_flags(help_text: str) -> Dict[str, Any]:
     """
-    Zones:
-    - appelle extractor_fn si disponible
-    - si None => fallback regex interne (ZONE_THRESHOLDS)
-    Normalise en zones/constants.
+    Doit retourner un dict (les tests indexent avec flags["mentions_input"], etc.)
     """
-    out: Dict[str, Any] = {
-        "zones": {},
-        "constants": {},
-        "if_chain": [],
-        "attempted": True,
-        "method": "ast",
-    }
-
-    raw = None
-    try:
-        raw = extractor_fn(str(instrument_path)) if extractor_fn else None
-    except Exception as e:
-        _debug(f"extractor_fn exception: {e!r}")
-        raw = None
-
-    if raw is None:
-        fb = _fallback_regex_thresholds_from_file(instrument_path)
-        if fb is None:
-            out["method"] = "ast_failed"
-            out["error"] = "extract_zone_thresholds_ast returned None"
-            return out
-        out["method"] = "fallback"
-        out["fallback"] = "ZONE_THRESHOLDS_regex"
-        raw = fb
-
-    if not isinstance(raw, dict):
-        out["method"] = "ast_failed"
-        out["error"] = f"extract_zone_thresholds_ast returned non-dict: {type(raw).__name__}"
-        return out
-
-    # thresholds -> constants THRESH_i
-    if isinstance(raw.get("thresholds"), (list, tuple)):
-        ths = []
-        for x in list(raw.get("thresholds")):
-            if isinstance(x, (int, float)) and not isinstance(x, bool):
-                ths.append(float(x))
-        out["constants"] = {f"THRESH_{i}": v for i, v in enumerate(ths)}
-        out["pattern"] = raw.get("pattern", "thresholds")
-        out["name"] = raw.get("name")
-
-    # mapping -> constants
-    elif isinstance(raw.get("mapping"), dict):
-        mp = raw.get("mapping") if isinstance(raw.get("mapping"), dict) else {}
-        out["constants"] = {
-            str(k): v
-            for k, v in mp.items()
-            if isinstance(v, (int, float, str)) and not isinstance(v, bool)
-        }
-        out["pattern"] = raw.get("pattern", "mapping")
-        out["name"] = raw.get("name")
-
-    # passthrough
-    elif isinstance(raw.get("constants"), dict) or isinstance(raw.get("if_chain"), list):
-        out["constants"] = raw.get("constants") if isinstance(raw.get("constants"), dict) else {}
-        out["if_chain"] = raw.get("if_chain") if isinstance(raw.get("if_chain"), list) else []
-        out["pattern"] = raw.get("pattern", "ast")
-
-    else:
-        out["method"] = "ast_failed"
-        out["error"] = "extract_zone_thresholds_ast returned dict without recognized keys: " + ", ".join(sorted(raw.keys()))
-        return out
-
-    out["zones"] = {
-        k: v
-        for k, v in (out.get("constants") or {}).items()
-        if isinstance(v, (int, float, str)) and not isinstance(v, bool)
-    }
-    return out
-
-
-def _run_score_once(
-    instrument_path: Path, input_json: Dict[str, Any]
-) -> Tuple[int, str, str, Optional[Dict[str, Any]]]:
-    with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        in_path = td_path / "input.json"
-        out_dir = td_path / "out"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        in_path.write_text(json.dumps(input_json, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        cmd = ["python3", str(instrument_path), "score", "--input", str(in_path), "--outdir", str(out_dir)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
-
-        results_path = out_dir / "results.json"
-        results = None
-        if results_path.exists():
-            try:
-                results = json.loads(results_path.read_text(encoding="utf-8"))
-            except Exception:
-                results = None
-        return proc.returncode, proc.stdout or "", proc.stderr or "", results
-
-
-def check_formula_contract(_instrument_path: Path) -> Dict[str, Any]:
-    # volontairement minimal ici (ton pipeline actuel met formula_checked=False)
-    return {"golden_attempted": False, "golden_pass": False}
-
-
-def calculate_compliance_levels(cli_info: Dict[str, Any], zones_info: Dict[str, Any], formula_info: Dict[str, Any]) -> Dict[str, Any]:
-    def assess_level(full: bool, partial: bool) -> str:
-        if full:
-            return "FULL"
-        if partial:
-            return "PARTIAL"
-        return "MINIMAL"
-
-    cli_full = bool(
-        cli_info.get("help_valid", False)
-        and len(cli_info.get("subcommands", [])) >= 2
-        and all(f in (cli_info.get("flags") or []) for f in ["--input", "--outdir"])
-    )
-    cli_partial = bool(cli_info.get("help_valid", False))
-    cli_level = assess_level(cli_full, cli_partial)
-
-    zones = zones_info.get("zones") or {}
-    literal_zones = {k: v for k, v in zones.items() if isinstance(v, (int, float, str)) and not isinstance(v, bool)}
-    zones_full = len(literal_zones) > 0
-    zones_partial = bool(zones_info.get("attempted", False))
-    zones_level = assess_level(zones_full, zones_partial)
-
-    formula_full = bool(formula_info.get("golden_pass", False))
-    formula_partial = bool(formula_info.get("golden_attempted", False))
-    formula_level = assess_level(formula_full, formula_partial)
-
-    order = {"FULL": 3, "PARTIAL": 2, "MINIMAL": 1}
-    global_level = min([cli_level, zones_level, formula_level], key=lambda x: order[x])
+    flags_list = _extract_long_flags(help_text)
+    txt = (help_text or "").lower()
 
     return {
-        "axes": {"cli": cli_level, "zones": zones_level, "formula": formula_level},
-        "global": global_level,
-        "summary": f"CLI:{cli_level}/ZONES:{zones_level}/FORMULA:{formula_level}",
+        "flags": flags_list,
+        "has_new_template": ("new-template" in txt),
+        "has_score": (re.search(r"\bscore\b", txt) is not None),
+        "mentions_input": ("--input" in flags_list) or ("--input" in txt),
+        "mentions_outdir": ("--outdir" in flags_list) or ("--outdir" in txt),
+        "mentions_agg": (
+            ("--agg_tau" in flags_list)
+            or ("--agg_τ" in flags_list)
+            or ("--agg" in txt)
+            or ("agg_" in txt)
+        ),
+        "mentions_bottleneck": ("bottleneck" in txt),
     }
 
 
-def generate_contract_report(instrument_path: Path) -> Dict[str, Any]:
-    repo_root = Path(__file__).resolve().parent
-    _debug(f"contract_probe.py path={Path(__file__).resolve()}")
-    _debug(f"repo_root={repo_root}")
+def detect_tau_agg_flag(help_text: str) -> Optional[str]:
+    """
+    Retourne un string (ou None). Les tests attendent:
+      - "--agg_τ" prioritaire
+      - sinon "--agg_tau"
+    """
+    flags_list = _extract_long_flags(help_text)
+    if "--agg_τ" in flags_list:
+        return "--agg_τ"
+    if "--agg_tau" in flags_list:
+        return "--agg_tau"
+    return None
 
-    contracts_mod = _load_local_contracts_module(repo_root)
-    run_help_fn = getattr(contracts_mod, "run_help", _run_help_fallback) if contracts_mod else _run_help_fallback
-    extractor_fn = getattr(contracts_mod, "extract_zone_thresholds_ast", None) if contracts_mod else None
 
-    cli = extract_cli_contract(instrument_p_
+def extract_cli_contract(help_text: str) -> Dict[str, Any]:
+    """
+    Contrat CLI (utilisable par contract_probe.py si besoin).
+    """
+    flags_list = _extract_long_flags(help_text)
+    txt = help_text or ""
+
+    subcommands: List[str] = []
+    for cmd in ["new-template", "score"]:
+        if re.search(rf"\b{re.escape(cmd)}\b", txt):
+            subcommands.append(cmd)
+
+    tau_aliases = {
+        "has_tau_ascii": ("--agg_tau" in flags_list) or ("--agg_tau" in txt),
+        "has_tau_unicode": ("--agg_τ" in flags_list) or ("--agg_τ" in txt),
+    }
+
+    return {
+        "help_valid": len((help_text or "").strip()) > 0,
+        "help_len": len(help_text or ""),
+        "subcommands": sorted(set(subcommands)),
+        "flags": flags_list,
+        "required_subcommands": ["new-template", "score"],
+        "required_flags": ["--input", "--outdir"],
+        "tau_aliases": tau_aliases,
+    }
+
+
+# =========================================================
+# Zones extraction (AST + fallback)
+# =========================================================
+
+def _literal_eval_safe(node: ast.AST) -> Any:
+    try:
+        return ast.literal_eval(node)
+    except Exception:
+        return None
+
+
+def _is_number(x: Any) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _collect_if_chain(node: ast.If) -> Optional[List[ast.If]]:
+    chain: List[ast.If] = []
+    cur: Optional[ast.If] = node
+    while isinstance(cur, ast.If):
+        chain.append(cur)
+        if cur.orelse and len(cur.orelse) == 1 and isinstance(cur.orelse[0], ast.If):
+            cur = cur.orelse[0]
+        else:
+            break
+    return chain if chain else None
+
+
+def _extract_threshold_from_test(test: ast.AST) -> Optional[float]:
+    if not isinstance(test, ast.Compare):
+        return None
+    if len(test.ops) != 1 or len(test.comparators) != 1:
+        return None
+
+    left = test.left
+    right = test.comparators[0]
+
+    # Heuristique minimale: variable T ou t
+    if not isinstance(left, ast.Name) or left.id not in {"T", "t"}:
+        return None
+
+    val = _literal_eval_safe(right)
+    return float(val) if _is_number(val) else None
+
+
+def _extract_zone_from_body(body: List[ast.stmt]) -> Optional[str]:
+    for st in body:
+        if isinstance(st, ast.Assign) and len(st.targets) == 1 and isinstance(st.targets[0], ast.Name):
+            if st.targets[0].id in {"zone", "Z", "label"}:
+                val = _literal_eval_safe(st.value)
+                if isinstance(val, str) and val:
+                    return val
+    return None
+
+
+def _parse_if_chain_for_T(chain: List[ast.If]) -> Tuple[List[float], List[str]]:
+    thresholds: List[float] = []
+    zones: List[str] = []
+    for n in chain:
+        th = _extract_threshold_from_test(n.test)
+        z = _ex_
