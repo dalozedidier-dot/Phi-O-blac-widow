@@ -78,6 +78,10 @@ jobs:
           rc=${PIPESTATUS[0]}
           echo "=== EXIT CODE: ${rc} ==="
 
+          echo "Bundle dir (if any):"
+          ls -la _llm_bundle || true
+          ls -la _llm_bundle/phio_llm_bundle.tar.gz || true
+
           echo "Git status APRÈS:"
           git status --porcelain || true
 
@@ -90,6 +94,7 @@ jobs:
           name: collector-test-artifacts
           path: |
             test-reports/**
+            _llm_bundle/**
             *.log
           if-no-files-found: warn
           retention-days: 3
