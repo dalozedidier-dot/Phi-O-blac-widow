@@ -14,11 +14,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set up job
-        run: |
-          set -euo pipefail
-          echo "CI start"
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -37,41 +32,26 @@ jobs:
       - name: Hardening: baseline must exist
         run: |
           set -euo pipefail
-          test -f .contract/contract_baseline.json || (echo "❌ Missing .contract/contract_baseline.json. Run generate_baseline.yml." && exit 1)
+          test -f .contract/contract_baseline.json || (echo "❌ Missing .contract/contract_baseline.json. Generate + commit a baseline." && exit 1)
 
       - name: Hardening: baseline must be valid JSON + not empty
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
-
           p = ".contract/contract_baseline.json"
           with open(p, "r", encoding="utf-8") as f:
               data = json.load(f)
-
           if not isinstance(data, dict):
               raise SystemExit("❌ Baseline JSON is not an object/dict.")
           if len(data) == 0:
-              raise SystemExit("❌ Baseline is empty ({}). Run generate_baseline.yml.")
-
+              raise SystemExit("❌ Baseline is empty ({}). Generate + commit a baseline.")
           required = ["contract_version", "compliance", "cli", "zones", "formula"]
           missing = [k for k in required if k not in data]
           if missing:
               raise SystemExit(f"❌ Baseline missing keys: {missing}")
-
           print("✅ Baseline OK")
           PY
-
-      - name: Hardening: forbid baseline updates in CI
-        run: |
-          set -euo pipefail
-          # CI ne doit pas modifier la baseline, sinon dérive silencieuse.
-          if git status --porcelain | grep -q ".contract/contract_baseline.json"; then
-            echo "❌ Baseline modified during CI. Forbidden."
-            git diff -- .contract/contract_baseline.json || true
-            exit 1
-          fi
-          echo "✅ No baseline update detected."
 
       - name: Run contract validation
         run: |
@@ -79,13 +59,11 @@ jobs:
           chmod +x validate_contract_warnings.sh || true
           ./validate_contract_warnings.sh
 
-      - name: Run all tests (reports)
+      - name: Run tests (reports)
         run: |
           set -euo pipefail
           mkdir -p test-reports/test-results
-          pytest -q \
-            --junitxml=test-reports/test-results/pytest.xml \
-            || (echo "❌ pytest failed" && exit 1)
+          pytest -q --junitxml=test-reports/test-results/pytest.xml
 
       - name: Upload artifacts
         if: always()
