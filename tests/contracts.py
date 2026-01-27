@@ -158,4 +158,90 @@ def _parse_if_chain_for_T(chain: List[ast.If]) -> Tuple[List[float], List[str]]:
     zones: List[str] = []
     for n in chain:
         th = _extract_threshold_from_test(n.test)
-        z = _ex_
+        z = _extract_zone_from_body(n.body)
+        if th is None or z is None:
+            return ([], [])
+        thresholds.append(float(th))
+        zones.append(str(z))
+    return thresholds, zones
+
+
+def _fallback_regex_thresholds(src: str) -> Optional[Dict[str, Any]]:
+    """
+    Fallback sans AST: détecte ZONE_THRESHOLDS = [ ... ] ou ( ... ).
+    Ne fait aucun eval, parse seulement les nombres.
+    """
+    m = re.search(r"ZONE_THRESHOLDS\s*=\s*\[([^\]]+)\]", src)
+    if not m:
+        m = re.search(r"ZONE_THRESHOLDS\s*=\s*\(([^\)]+)\)", src)
+    if not m:
+        return None
+
+    inside = m.group(1)
+    nums = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)", inside)
+    if not nums:
+        return None
+
+    return {"thresholds": [float(x) for x in nums], "pattern": "fallback_regex", "name": "ZONE_THRESHOLDS"}
+
+
+def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Extraction conservatrice:
+      1) assign/annassign sur noms candidats (ZONE_THRESHOLDS, etc.)
+      2) if/elif chain sur T
+      3) fallback regex sur ZONE_THRESHOLDS
+    """
+    p = Path(instrument_path)
+    if not p.exists():
+        return None
+
+    src = p.read_text(encoding="utf-8", errors="ignore")
+
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return _fallback_regex_thresholds(src)
+
+    candidate_names = {
+        "ZONE_THRESHOLDS",
+        "ZONES",
+        "ZONE_BOUNDS",
+        "ZONE_LIMITS",
+        "ZONE_CUTS",
+        "THRESHOLDS",
+    }
+
+    def _handle_assign(name: str, value_node: ast.AST) -> Optional[Dict[str, Any]]:
+        val = _literal_eval_safe(value_node)
+        if isinstance(val, (list, tuple)) and len(val) > 0 and all(_is_number(x) for x in val):
+            return {"thresholds": [float(x) for x in val], "pattern": "assign", "name": name}
+        if isinstance(val, dict) and len(val) > 0:
+            return {"mapping": val, "pattern": "assign", "name": name}
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id in candidate_names:
+                    out = _handle_assign(t.id, node.value)
+                    if out:
+                        return out
+
+        if isinstance(node, ast.AnnAssign):
+            t = node.target
+            if isinstance(t, ast.Name) and t.id in candidate_names and node.value is not None:
+                out = _handle_assign(t.id, node.value)
+                if out:
+                    return out
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If):
+            chain = _collect_if_chain(node)
+            if not chain:
+                continue
+            ths, z = _parse_if_chain_for_T(chain)
+            if ths and z and len(ths) == len(z):
+                return {"thresholds": ths, "zones": z, "pattern": "if_chain"}
+
+    return _fallback_regex_thresholds(src)
