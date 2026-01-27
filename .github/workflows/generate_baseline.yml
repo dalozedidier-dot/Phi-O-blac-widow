@@ -43,6 +43,8 @@ jobs:
               raise SystemExit("❌ Baseline is empty dict ({})")
           print("zones.method:", data.get("zones", {}).get("method"))
           print("zones_count:", data.get("summary", {}).get("zones_count"))
+          print("instrument_has_ZONE_THRESHOLDS:", data.get("zones", {}).get("_forensics", {}).get("instrument_has_ZONE_THRESHOLDS"))
+          print("instrument_zone_line:", data.get("zones", {}).get("_forensics", {}).get("instrument_zone_line"))
           PY
 
       - name: Commit baseline
