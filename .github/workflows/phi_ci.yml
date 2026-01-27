@@ -39,6 +39,19 @@ jobs:
           set -euo pipefail
           test -f .contract/contract_baseline.json || (echo "❌ Baseline missing: .contract/contract_baseline.json" && exit 3)
 
+      - name: "Hardening: baseline must be valid JSON + not empty"
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          p = ".contract/contract_baseline.json"
+          with open(p, "r", encoding="utf-8") as f:
+              data = json.load(f)
+          if not isinstance(data, dict) or len(data.keys()) == 0:
+              raise SystemExit("❌ Baseline is empty ({}). Run generate_baseline.yml.")
+          print("✅ Baseline OK:", p)
+          PY
+
       - name: "Hardening: forbid baseline updates in CI"
         run: |
           set -euo pipefail
