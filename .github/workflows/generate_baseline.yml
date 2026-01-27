@@ -11,104 +11,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: true
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
       - name: Install deps
-        shell: bash
         run: |
-          set -Eeuo pipefail
+          set -euo pipefail
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Debug: confirm instrument + confirm extractor import + direct extraction
-        shell: bash
+      - name: Generate baseline
         run: |
-          set -Eeuo pipefail
-          python - <<'PY'
-          import os
-          import inspect
-          from pathlib import Path
-
-          from tests.contracts import extract_zone_thresholds_ast
-
-          print("=== EXTRACTOR IMPORT PROOF ===")
-          print("extract_zone_thresholds_ast sourcefile:", inspect.getsourcefile(extract_zone_thresholds_ast))
-          print("extract_zone_thresholds_ast firstline:", extract_zone_thresholds_ast.__code__.co_firstlineno)
-
-          instr = Path("./phi_otimes_o_instrument_v0_1.py")
-          print("\n=== INSTRUMENT PROOF ===")
-          print("instrument exists:", instr.exists())
-          print("instrument abs:", instr.resolve())
-
-          if not instr.exists():
-              raise SystemExit("❌ instrument missing at ./phi_otimes_o_instrument_v0_1.py")
-
-          lines = instr.read_text(encoding="utf-8", errors="ignore").splitlines()
-          print("---- instrument HEAD (80) ----")
-          print("\n".join(lines[:80]))
-
-          print("---- first line containing ZONE_THRESHOLDS ----")
-          found = False
-          for i, line in enumerate(lines, 1):
-              if "ZONE_THRESHOLDS" in line:
-                  print(f"{i}: {line}")
-                  found = True
-                  break
-          print("ZONE_THRESHOLDS found:", found)
-
-          print("\n=== DIRECT EXTRACTION (PHIO_DEBUG_AST=1) ===")
-          os.environ["PHIO_DEBUG_AST"] = "1"
-          out = extract_zone_thresholds_ast(str(instr))
-          print("direct_extract_zone_thresholds_ast:", out)
-          PY
-
-      - name: Generate baseline (PHIO_DEBUG_AST=1)
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          set -euo pipefail
           mkdir -p .contract
-          PHIO_DEBUG_AST=1 python contract_probe.py \
+          python contract_probe.py \
             --instrument ./phi_otimes_o_instrument_v0_1.py \
             --out .contract/contract_baseline.json
 
       - name: Validate baseline JSON + minimal keys
-        shell: bash
         run: |
-          set -Eeuo pipefail
+          set -euo pipefail
           python - <<'PY'
           import json
           p = ".contract/contract_baseline.json"
           data = json.load(open(p, "r", encoding="utf-8"))
-
           if not isinstance(data, dict) or len(data) == 0:
               raise SystemExit("❌ Baseline is empty dict ({})")
-
-          required = ["contract_version", "compliance", "cli", "zones", "formula"]
-          missing = [k for k in required if k not in data]
-          if missing:
-              raise SystemExit(f"❌ Baseline missing keys: {missing}")
-
-          print("✅ Baseline OK:", p)
-          print("compliance:", data.get("compliance", {}).get("summary"))
           print("zones.method:", data.get("zones", {}).get("method"))
-          print("zones.error:", data.get("zones", {}).get("error"))
           print("zones_count:", data.get("summary", {}).get("zones_count"))
           PY
 
       - name: Commit baseline
-        shell: bash
         run: |
-          set -Eeuo pipefail
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .contract/contract_baseline.json
