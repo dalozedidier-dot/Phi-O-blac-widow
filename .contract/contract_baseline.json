@@ -1,1 +1,63 @@
-{}
+{}name: Generate contract baseline (artifact only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Generate baseline
+        run: |
+          set -euo pipefail
+          mkdir -p .contract
+          python contract_probe.py \
+            --instrument ./phi_otimes_o_instrument_v0_1.py \
+            --out .contract/contract_baseline.json
+
+      - name: Validate baseline JSON + minimal keys
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+
+          p = ".contract/contract_baseline.json"
+          with open(p, "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          if not isinstance(data, dict) or len(data) == 0:
+              raise SystemExit("❌ Baseline is empty dict ({}).")
+
+          required = ["contract_version", "compliance", "cli", "zones", "formula"]
+          missing = [k for k in required if k not in data]
+          if missing:
+              raise SystemExit(f"❌ Baseline missing keys: {missing}")
+
+          print("✅ Baseline OK:", p)
+          PY
+
+      - name: Upload baseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-baseline
+          path: .contract/contract_baseline.json
+          if-no-files-found: error
