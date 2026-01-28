@@ -1,0 +1,14 @@
+[core]
+# Path to the instrument CLI script.
+# Repo default: phi_otimes_o_instrument_v0_1.py (shim -> scripts/*)
+instrument = "./phi_otimes_o_instrument_v0_1.py"
+
+# Input dataset (CSV or JSON) to feed the instrument.
+input = "./test_data/minimal_timeseries.csv"
+
+# Output directory base. A run_id subfolder will be created under this path.
+out_base = "./runs"
+
+# Optional extra CLI args passed to the instrument after "score".
+# Example: extra_args = ["--agg_tau", "0.25"]
+extra_args = []

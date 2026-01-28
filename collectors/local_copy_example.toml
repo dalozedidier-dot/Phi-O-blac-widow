@@ -1,0 +1,11 @@
+[collector]
+kind = "local_copy"
+
+# Source file to copy into the collected dataset folder.
+source = "./test_data/minimal_timeseries.csv"
+
+# Where collected datasets are written.
+out_base = "./collected"
+
+# Optional tag stored in collector_manifest.json
+tag = "example"
