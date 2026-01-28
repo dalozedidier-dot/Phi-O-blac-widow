@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PhiO LLM bundle manifest",
+  "type": "object",
+  "required": [
+    "root",
+    "generated",
+    "count",
+    "entries"
+  ],
+  "properties": {
+    "root": {
+      "type": "string"
+    },
+    "generated": {
+      "type": "string",
+      "description": "ISO-8601 datetime string"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "bytes"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$|^NO_SHA256_TOOL$|^ERROR$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
