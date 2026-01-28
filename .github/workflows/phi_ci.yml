@@ -1,14 +1,15 @@
-name: Smoke (PhiO)
+name: Band suite (SOST)
 
 on:
-  workflow_dispatch:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  smoke:
+  band_suite:
     runs-on: ubuntu-latest
-
+    env:
+      PYTHONPATH: .
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,54 +19,24 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Force /usr/bin/python to use setup-python interpreter
+      - name: Install
         shell: bash
         run: |
           set -euo pipefail
-          echo "Before:"
-          which python || true
-          python -V || true
-          /usr/bin/python -V || true
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install numpy pandas
 
-          sudo rm -f /usr/bin/python
-          sudo ln -s "$(which python)" /usr/bin/python
-
-          echo "After:"
-          /usr/bin/python -V
-          /usr/bin/python -m pip --version
-
-      - name: Install dependencies
+      - name: Run band suite
         shell: bash
         run: |
           set -euo pipefail
-          /usr/bin/python -m pip install -U pip
-          if [ -f requirements.txt ]; then
-            /usr/bin/python -m pip install -r requirements.txt
-          fi
-          /usr/bin/python -m pip install pytest
+          mkdir -p _ci_out
+          python scripts/ci_band_suite.py --pattern "test_data/band_*.csv" --outdir "_ci_out"
 
-      - name: Run PhiO tests
-        shell: bash
-        env:
-          PYTHONPATH: .
-        run: |
-          set -euo pipefail
-          if [ -f run_all_tests.sh ]; then
-            bash run_all_tests.sh
-          elif [ -f run_all_tests.py ]; then
-            /usr/bin/python run_all_tests.py
-          else
-            echo "No run_all_tests.sh or run_all_tests.py found"
-            exit 2
-          fi
-
-      - name: Upload test reports
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phio_artifacts
-          path: |
-            test-reports/
-            _ci_out/
-          retention-days: 30
-          if-no-files-found: ignore
+          name: band_suite_artifacts
+          path: _ci_out/
