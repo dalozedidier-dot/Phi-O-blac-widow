@@ -30,16 +30,47 @@ jobs:
           fi
           pip install pytest
 
-      - name: Fix executable bits (CLI + collector)
+      - name: Normalize CLI scripts (LF + shebang + chmod)
         shell: bash
         run: |
           set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+
+          def normalize(path: str, ensure_shebang: bool = False, shebang: str = "#!/usr/bin/env python3"):
+            p = Path(path)
+            if not p.exists():
+              return
+
+            b = p.read_bytes()
+
+            # Remove UTF-8 BOM if present
+            if b.startswith(b"\xef\xbb\xbf"):
+              b = b[3:]
+
+            # Normalize line endings to LF
+            b = b.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+            # Ensure shebang first line if required
+            if ensure_shebang and not b.startswith(b"#!"):
+              b = (shebang + "\n").encode("utf-8") + b
+
+            p.write_bytes(b)
+
+          normalize("phi_otimes_o_instrument_v0_1.py", ensure_shebang=True)
+          normalize("scripts/phio_llm_collect.sh", ensure_shebang=False)
+          PY
+
           chmod +x phi_otimes_o_instrument_v0_1.py 2>/dev/null || true
           chmod +x scripts/phio_llm_collect.sh 2>/dev/null || true
-          ls -la phi_otimes_o_instrument_v0_1.py || true
-          ls -la scripts/phio_llm_collect.sh || true
 
-      - name: Run PhiO tests (and capture real exit code)
+          echo "Instrument head:"
+          head -n 2 phi_otimes_o_instrument_v0_1.py || true
+          echo ""
+          ls -la phi_otimes_o_instrument_v0_1.py || true
+
+      - name: Run PhiO tests (capture real exit code)
         shell: bash
         env:
           PYTHONPATH: .
@@ -61,12 +92,10 @@ jobs:
             code=2
           fi
 
-          if [ -d tests ]; then
-            pytest -q 2>&1 | tee _ci_out/pytest.log
-            pytest_code=$?
-            if [ "$pytest_code" != "0" ]; then
-              code=$pytest_code
-            fi
+          pytest -q 2>&1 | tee _ci_out/pytest.log
+          pytest_code=$?
+          if [ "$pytest_code" != "0" ]; then
+            code=$pytest_code
           fi
 
           echo "$code" > _ci_out/exit_code.txt
