@@ -46,6 +46,8 @@ for f in tree.txt manifest.json phio_llm_bundle.tar.gz; do
   test -f "$OUT/$f" || { echo "❌ Manquant: $f"; exit 1; }
 done
 
+python3 "$REPO_ROOT/scripts/validate_manifest.py" "$OUT/manifest.json" >/dev/null 2>&1 || { echo "❌ Manifest invalide"; exit 1; }
+
 entries=$(python3 - <<'PY' "$OUT/manifest.json"
 import json, sys
 print(len(json.load(open(sys.argv[1], encoding="utf-8")).get("entries",[])))
