@@ -1,0 +1,11 @@
+[pipeline]
+# A minimal end-to-end run:
+# 1) collect a dataset (collector profile)
+# 2) run core analysis on the collected dataset (core profile)
+
+collector_profile = "collectors/local_copy_example.toml"
+core_profile = "profiles/core_example.toml"
+
+# Output base for core runs (optional override).
+# If empty, core_profile.out_base is used.
+core_out_base_override = ""
