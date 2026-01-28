@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [ "main" ]
-  schedule:
-    - cron: "0 */6 * * *"
 
 jobs:
   smoke:
@@ -20,23 +18,30 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps for setup-python interpreter
+      - name: Force /usr/bin/python to use setup-python interpreter
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install -U pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          pip install pytest
+          echo "Before:"
+          which python || true
+          python -V || true
+          /usr/bin/python -V || true
 
-      - name: Install pytest for /usr/bin/python (system interpreter)
+          sudo rm -f /usr/bin/python
+          sudo ln -s "$(which python)" /usr/bin/python
+
+          echo "After:"
+          /usr/bin/python -V
+          /usr/bin/python -m pip --version
+
+      - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y python3-pip
           /usr/bin/python -m pip install -U pip
+          if [ -f requirements.txt ]; then
+            /usr/bin/python -m pip install -r requirements.txt
+          fi
           /usr/bin/python -m pip install pytest
 
       - name: Run PhiO tests
@@ -48,7 +53,7 @@ jobs:
           if [ -f run_all_tests.sh ]; then
             bash run_all_tests.sh
           elif [ -f run_all_tests.py ]; then
-            python run_all_tests.py
+            /usr/bin/python run_all_tests.py
           else
             echo "No run_all_tests.sh or run_all_tests.py found"
             exit 2
