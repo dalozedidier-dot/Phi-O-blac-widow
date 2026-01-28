@@ -7,15 +7,8 @@ from typing import Any, Dict, Optional
 
 def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]]:
     """
-    Heuristique AST, descriptive-only.
-
-    Objectif:
-    - Lire le fichier instrument (script python)
-    - Détecter une définition "seuils" ou "mapping" de zones si elle existe
-    - Retourner un dict minimal descriptif
-    - Retourner None si rien de plausible n'est détecté
-
-    Aucune validation sémantique, aucun jugement.
+    Extraction best-effort de structures type mapping/thresholds depuis un script python.
+    Descriptive-only: on vérifie uniquement la forme, jamais le sens.
     """
     p = Path(instrument_path)
     if not p.exists() or not p.is_file():
@@ -31,47 +24,41 @@ def extract_zone_thresholds_ast(instrument_path: str) -> Optional[Dict[str, Any]
     except SyntaxError:
         return None
 
-    candidates: list[dict[str, Any]] = []
-
-    def _is_interesting_name(name: str) -> bool:
+    def is_interesting(name: str) -> bool:
         u = name.upper()
-        return any(k in u for k in ("ZONE", "ZONING", "THRESH", "THRESHOLD", "MAP"))
+        return any(k in u for k in ("ZONE", "ZONING", "THRESH", "THRESHOLD", "MAP", "MAPPING"))
 
-    def _try_literal(node: ast.AST) -> Optional[Any]:
+    def try_lit(node: ast.AST) -> Optional[Any]:
         try:
             return ast.literal_eval(node)
         except Exception:
             return None
 
-    def _is_mapping(obj: Any) -> bool:
-        return isinstance(obj, dict) and len(obj) > 0
-
-    def _kind(name: str, mapping: dict) -> str:
-        if any(isinstance(v, (int, float)) for v in mapping.values()):
-            return "thresholds"
-        return "mapping"
+    candidates: list[dict[str, Any]] = []
 
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-
-        targets = []
         if isinstance(node, ast.Assign):
-            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
-            value = node.value
-        else:
-            if isinstance(node.target, ast.Name):
-                targets = [node.target.id]
-                value = node.value
-            else:
-                continue
+            target_names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            lit = try_lit(node.value)
+            if isinstance(lit, dict) and lit and any(is_interesting(n) for n in target_names):
+                for name in target_names:
+                    if is_interesting(name):
+                        key = "thresholds" if any(isinstance(v, (int, float)) for v in lit.values()) else "mapping"
+                        candidates.append({"pattern": f"assign:{name}", key: lit})
 
-        if value is None:
-            continue
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.value is not None and is_interesting(node.target.id):
+                lit = try_lit(node.value)
+                if isinstance(lit, dict) and lit:
+                    key = "thresholds" if any(isinstance(v, (int, float)) for v in lit.values()) else "mapping"
+                    candidates.append({"pattern": f"annassign:{node.target.id}", key: lit})
 
-        lit = _try_literal(value)
-        if not _is_mapping(lit):
-            continue
+    if not candidates:
+        return None
 
-        for name in targets:
-            if _is_interesting_name(name):
+    def score(c: dict[str, Any]) -> int:
+        d = c.get("thresholds") or c.get("mapping") or {}
+        return len(d) if isinstance(d, dict) else 0
+
+    candidates.sort(key=score, reverse=True)
+    return candidates[0]
