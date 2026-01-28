@@ -560,7 +560,7 @@ def main() -> int:
         "summary": f"CLI:{axes['cli']}/ZONES:{axes['zones']}/FORMULA:{axes['formula']}",
     }
 
-        baseline = canonicalize_json(baseline)
+    baseline = canonicalize_json(baseline)
 
     ensure_parent_dir(out_path)
     with out_path.open("w", encoding="utf-8") as f:
