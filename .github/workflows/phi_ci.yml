@@ -15,12 +15,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python (toolcache)
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Debug python paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PATH python:"
+          which python || true
+          python -V || true
+          echo ""
+          echo "/usr/bin/python:"
+          /usr/bin/python -V || true
+          echo ""
+          echo "/usr/bin/python3:"
+          /usr/bin/python3 -V || true
+
+      - name: Install deps (PATH python) + pytest
         shell: bash
         run: |
           set -euo pipefail
@@ -28,33 +42,34 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          # Fix: pytest is required by the smoke suite
           pip install pytest
+
+      - name: Install pytest for /usr/bin/python (system python)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Assure pip côté python système (au cas où)
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+
+          # Installer pytest pour l'interpréteur qui est utilisé en dur (/usr/bin/python)
+          /usr/bin/python -m pip install -U pip
+          /usr/bin/python -m pip install pytest
 
       - name: Run PhiO tests
         shell: bash
         run: |
-          set +e
-          rm -rf _ci_out
-          mkdir -p _ci_out
+          set -euo pipefail
 
           if [ -f run_all_tests.sh ]; then
-            bash run_all_tests.sh 2>&1 | tee _ci_out/phio_stdout.log
-            echo $? > _ci_out/exit_code.txt
+            bash run_all_tests.sh
           elif [ -f run_all_tests.py ]; then
-            python run_all_tests.py 2>&1 | tee _ci_out/phio_stdout.log
-            echo $? > _ci_out/exit_code.txt
+            python run_all_tests.py
           else
-            echo "No run_all_tests.sh or run_all_tests.py found" | tee _ci_out/phio_stdout.log
-            echo 2 > _ci_out/exit_code.txt
+            echo "No run_all_tests.sh or run_all_tests.py found"
+            exit 2
           fi
-
-          # Optional: run pytest directly if tests/ exists
-          if [ -d tests ]; then
-            pytest -q 2>&1 | tee -a _ci_out/phio_stdout.log
-          fi
-
-          exit 0
 
       - name: Upload test reports
         if: always()
@@ -62,17 +77,6 @@ jobs:
         with:
           name: phio_artifacts
           path: |
-            _ci_out/
             test-reports/
           retention-days: 30
           if-no-files-found: ignore
-
-      - name: Fail only on fatal errors
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(cat _ci_out/exit_code.txt || echo 99)
-          echo "exit_code=$code"
-          if [ "$code" = "2" ] || [ "$code" = "99" ]; then
-            exit 1
-          fi
