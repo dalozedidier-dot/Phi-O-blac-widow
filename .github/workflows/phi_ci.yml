@@ -1,4 +1,4 @@
-name: Smoke (PhiO)
+name: Smoke PhiO (stable)
 
 on:
   push:
@@ -25,27 +25,23 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          # Si le projet est packagé, on tente editable.
-          if [ -f pyproject.toml ]; then
-            python -m pip install -e ".[dev]" || python -m pip install -e .
-          elif [ -f requirements.txt ]; then
+          if [ -f requirements.txt ]; then
             python -m pip install -r requirements.txt
           fi
-          # Minimum vital pour ton erreur actuelle
+          # Sécurité, même si déjà dans requirements.txt
           python -m pip install pytest
 
-      - name: Run PhiO tests
+      - name: Run PhiO smoke (contract + tests)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p _ci_out
-          # On essaie d'abord ton runner "maison" s'il existe, sinon pytest.
-          if [ -f "scripts/run_all_tests.sh" ]; then
-            bash scripts/run_all_tests.sh 2>&1 | tee _ci_out/phio_tests.log
-          elif [ -f "scripts/run_all_tests.py" ]; then
-            python scripts/run_all_tests.py 2>&1 | tee _ci_out/phio_tests.log
+
+          if [ -f "./run_all_tests.sh" ]; then
+            chmod +x ./run_all_tests.sh
+            ./run_all_tests.sh 2>&1 | tee _ci_out/phio_smoke.log
           else
-            python -m pytest -q 2>&1 | tee _ci_out/phio_tests.log
+            python -m pytest -q 2>&1 | tee _ci_out/phio_pytest.log
           fi
 
       - name: Upload artifacts
@@ -53,5 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: phio_ci_out
-          path: _ci_out/
+          path: |
+            _ci_out/
+            test-results/
           if-no-files-found: warn
