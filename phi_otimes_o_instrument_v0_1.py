@@ -2,6 +2,7 @@
 """
 PhiO Times Instrument v0.1
 Stub CLI minimal pour satisfaire les tests CLI/contract dans la CI.
+Nom attendu par les tests: phi_otimes_o_instrument_v0_1.py
 """
 
 import argparse
@@ -15,7 +16,6 @@ def build_parser() -> argparse.ArgumentParser:
         prog="phi_otimes_o_instrument_v0_1",
         description="PhiO O-Times Instrument v0.1 (stub)",
     )
-
     p.add_argument("--contract", type=str, required=False, help="Chemin vers un fichier contract.")
     p.add_argument("--baseline", type=str, required=False, help="Chemin vers une baseline contractuelle.")
     p.add_argument("--trace", action="store_true", help="Active une sortie trace.")
@@ -38,15 +38,17 @@ def main(argv: list[str] | None = None) -> int:
         "trace": bool(args.trace),
         "contract": args.contract,
         "baseline": args.baseline,
+        "mode": "analysis",
     }
 
+    # Validation minimale: si on donne un chemin, on vérifie qu'il existe.
     for key in ("contract", "baseline"):
         pth = getattr(args, key)
         if pth:
             if not Path(pth).exists():
                 msg = f"{key} introuvable: {pth}"
                 if args.json:
-                    print(json.dumps({"ok": False, "error": msg}))
+                    print(json.dumps({"ok": False, "error": msg}, sort_keys=True))
                 else:
                     print(msg, file=sys.stderr)
                 return 2
