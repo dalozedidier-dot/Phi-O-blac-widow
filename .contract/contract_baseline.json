@@ -2,7 +2,7 @@
   "contract_version": "1.5",
   "instrument_path": "/home/runner/work/PhiO/PhiO/phi_otimes_o_instrument_v0_1.py",
   "instrument_hash": "e1dde7d959de7d6dbf419ff64b73ac27fa44a3481725b3a0d31cb306d846b941",
-  "validation_timestamp": "2026-01-27T07:14:55.821729+00:00",
+  "validation_timestamp": "2026-01-29T00:57:16.450840+00:00",
   "_probe_forensics": {
     "probe_path": "/home/runner/work/PhiO/PhiO/contract_probe.py",
     "probe_sha256": "0185759e8e8628179d0cbc9184b71691f722f8308c225c6f5cd92a94fd440bbe",
@@ -14,16 +14,16 @@
       "platform": "Linux-6.11.0-1018-azure-x86_64-with-glibc2.39"
     },
     "env": {
-      "GITHUB_SHA": "ff07e702e13ff84f579b3cf1acb24d734b3750ea",
+      "GITHUB_SHA": "6ddb3b45a81461735cbe8d6967de89829e928f2e",
       "GITHUB_REF": "refs/heads/main",
       "GITHUB_WORKFLOW": "Generate contract baseline",
-      "GITHUB_RUN_ID": "21388088880"
+      "GITHUB_RUN_ID": "21461412577"
     },
     "contracts": {
       "contracts_path": "/home/runner/work/PhiO/PhiO/tests/contracts.py",
       "contracts_exists": true,
       "contracts_loaded": true,
-      "contracts_sha256": "ff879c115528caaef071cdfdc58a5afb959fdeef27b4ce7fa8edda197ac307f7",
+      "contracts_sha256": "7117a112ca00524ba217887f6f1bafd92c35046a0bc00d94ac9ff9aea4f4823d",
       "contracts_load_error": null
     }
   },
